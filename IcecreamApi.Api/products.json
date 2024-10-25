@@ -10,11 +10,5 @@
     "name": "Premium Pandan Coconut",
     "price": 19.99,
     "category": "Premium"
-  },
-  {
-    "id": 3,
-    "name": "Premium Durian Mao Shan Wang",
-    "price": 99.99,
-    "category": "Premium"
   }
 ]
