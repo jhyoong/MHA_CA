@@ -21,6 +21,7 @@ namespace IcecreamApi.Api
         [JsonPropertyName("name")]
         public string Name { get; set; } = string.Empty;
 
+        [Required]
         [Range(0.01, 10000.00)]
         [JsonPropertyName("price")]
         public decimal Price { get; set; }
