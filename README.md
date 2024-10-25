@@ -45,6 +45,7 @@ To deploy this template, you'll need to:
 
 ## Run unit tests
 ```dotnet test```
+* Note that if the hardcoded products.json file was modified, it may cause some unit tests to fail ( which is expected behaviour )
 
 ## Swagger Docs
 ``` http://127.0.0.1:5277/swagger/index.html ```

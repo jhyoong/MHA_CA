@@ -1,3 +1,4 @@
+## Rough cloudformation example; untested. Expect errors in deploying the stack directly ( account settings vary )
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'CloudFormation template for Ice Cream API deployment'
 
