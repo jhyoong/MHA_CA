@@ -21,7 +21,7 @@ Since I no longer have any free credits on AWS cloud, I'll include in an example
 
 [AWS DynamoDB](https://aws.amazon.com/dynamodb/) - fuss-free simple database that works well with scaling up. However, since there is a mention of not using databases, this will not be used.
 
-[AWS EC2](https://aws.amazon.com/ec2/) - As AWS Lambda has limited runtime (15mins) and will require a separate S3 bucket instance to store the hardcoded JSON object, an EC2 might be a more [straightforward](https://docs.aws.amazon.com/whitepapers/latest/develop-deploy-dotnet-apps-on-aws/running-.net-applications-in-the-aws-cloud.html) choice in hosting this on the cloud. Some references can be found [here](https://aws.amazon.com/blogs/dotnet/net-8-support-on-aws/)
+[AWS EC2](https://aws.amazon.com/ec2/) - As AWS Lambda has limited runtime (15mins) and will require a separate S3 bucket instance to store the hardcoded JSON object, an EC2 might be a more [straightforward](https://docs.aws.amazon.com/whitepapers/latest/develop-deploy-dotnet-apps-on-aws/running-.net-applications-in-the-aws-cloud.html) choice in hosting this on the cloud. Some references can be found [here](https://aws.amazon.com/blogs/dotnet/net-8-support-on-aws/).
 
 [AWS Gateway](https://aws.amazon.com/api-gateway/) - A core AWS service in managing APIs easily. 
 
@@ -45,7 +45,8 @@ To deploy this template, you'll need to:
 
 ## Run unit tests
 ```dotnet test```
-* Note that if the hardcoded products.json file was modified, it may cause some unit tests to fail ( which is expected behaviour )
+* Note that if the hardcoded products.json file was modified, it may cause some unit tests to fail. ( which is expected behaviour )
+* Run `dotnet clean` after running unit tests.
 
 ## Swagger Docs
 ``` http://127.0.0.1:5277/swagger/index.html ```
