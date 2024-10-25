@@ -1,0 +1,224 @@
+## Rough cloudformation example; untested. Expect errors in deploying the stack directly ( account settings vary )
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for Ice Cream API deployment'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: 'dev'
+    Description: 'Environment name (dev, staging, prod)'
+  
+  InstanceType:
+    Type: String
+    Default: 't2.micro'
+    AllowedValues:
+      - 't2.micro'
+      - 't2.small'
+      - 't2.medium'
+    Description: 'EC2 instance type'
+  
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: 'Name of existing EC2 KeyPair for SSH access'
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: 'VPC ID where resources will be created'
+
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: 'Subnet ID where EC2 instance will be launched'
+
+Resources:
+  # EC2 Security Group
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Ice Cream API EC2 instance
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+  # EC2 Instance Role
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2InstanceRole
+
+  # EC2 Instance
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: ami-0c7217cdde317cfec  # Amazon Linux 2023 AMI (update as needed)
+      KeyName: !Ref KeyPairName
+      SubnetId: !Ref SubnetId
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          
+          # Install .NET 8.0
+          rpm -Uvh https://packages.microsoft.com/config/centos/7/packages-microsoft-prod.rpm
+          yum install -y dotnet-sdk-8.0
+          
+          # Install nginx
+          yum install -y nginx
+          
+          # Start nginx
+          systemctl start nginx
+          systemctl enable nginx
+          
+          # Create directory for the application
+          mkdir -p /var/www/icecream-api
+          
+          # Configure nginx reverse proxy
+          cat > /etc/nginx/conf.d/icecream-api.conf << 'EOF'
+          server {
+              listen 80;
+              location / {
+                  proxy_pass http://localhost:5000;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection keep-alive;
+                  proxy_set_header Host $host;
+                  proxy_cache_bypass $http_upgrade;
+              }
+          }
+          EOF
+          
+          # Restart nginx
+          systemctl restart nginx
+          
+          # Set up the application service
+          cat > /etc/systemd/system/icecream-api.service << 'EOF'
+          [Unit]
+          Description=Ice Cream API
+          
+          [Service]
+          WorkingDirectory=/var/www/icecream-api
+          ExecStart=/usr/bin/dotnet IcecreamApi.Api.dll
+          Restart=always
+          RestartSec=10
+          SyslogIdentifier=icecream-api
+          User=nginx
+          Environment=ASPNETCORE_ENVIRONMENT=Production
+          Environment=ASPNETCORE_URLS=http://localhost:5000
+          
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          
+          # Enable and start the service
+          systemctl enable icecream-api
+          systemctl start icecream-api
+
+  # API Gateway
+  ApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub ${EnvironmentName}-icecream-api
+      Description: API Gateway for Ice Cream API
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  # API Gateway Resource
+  ApiResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: 'api'
+
+  ProductsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !Ref ApiResource
+      PathPart: 'products'
+
+  # API Gateway Methods
+  ApiGatewayGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref ProductsResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: HTTP_PROXY
+        IntegrationHttpMethod: GET
+        Uri: !Sub http://${EC2Instance.PublicDnsName}/api/products
+        IntegrationResponses:
+          - StatusCode: 200
+      MethodResponses:
+        - StatusCode: 200
+
+  ApiGatewayPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref ProductsResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: HTTP_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub http://${EC2Instance.PublicDnsName}/api/products
+        IntegrationResponses:
+          - StatusCode: 200
+      MethodResponses:
+        - StatusCode: 200
+
+  # API Gateway Deployment
+  ApiGatewayDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - ApiGatewayGetMethod
+      - ApiGatewayPostMethod
+    Properties:
+      RestApiId: !Ref ApiGateway
+      StageName: !Ref EnvironmentName
+
+Outputs:
+  EC2InstanceId:
+    Description: ID of the EC2 instance
+    Value: !Ref EC2Instance
+
+  EC2PublicDNS:
+    Description: Public DNS of the EC2 instance
+    Value: !GetAtt EC2Instance.PublicDnsName
+
+  ApiGatewayURL:
+    Description: URL of the API Gateway endpoint
+    Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${EnvironmentName}/api/products
